@@ -29,18 +29,12 @@
 
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
-import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
-import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
+import org.firstinspires.ftc.teamcode.bothardware.SwerveBotHardware;
 
 import java.text.DecimalFormat;
 import java.util.Arrays;
@@ -58,85 +52,13 @@ import java.util.Collections;
 @TeleOp(name = "Gpat Swerve Telemetry", group = "Gpat")
 //@Disabled
 public class GpatSwerveTelemetry extends LinearOpMode {
-    public DecimalFormat df = new DecimalFormat("#.##");
-
-    //----------------------------------------------------------------------------------------------
-    // DC Drive Motors
-    //----------------------------------------------------------------------------------------------
-    public DcMotor lfDriveMotor = null;
-    public DcMotor rfDriveMotor = null;
-    public DcMotor lrDriveMotor = null;
-    public DcMotor rrDriveMotor = null;
-
-    //----------------------------------------------------------------------------------------------
-    // Servo Motors
-    //----------------------------------------------------------------------------------------------
-    public Servo lfDriveServo = null;
-    public Servo rfDriveServo = null;
-    public Servo lrDriveServo = null;
-    public Servo rrDriveServo = null;
-
-    //----------------------------------------------------------------------------------------------
-    // Gryo
-    //----------------------------------------------------------------------------------------------
-    BNO055IMU imu; // The IMU sensor object
-    Orientation angles; // State used for updating telemetry
+    private DecimalFormat df = new DecimalFormat("#.##");
+    private SwerveBotHardware swerveBotHardware;
 
     @Override
     public void runOpMode() {
-        //----------------------------------------------------------------------------------------------
-        // DC Drive Motors
-        //----------------------------------------------------------------------------------------------
-        // Define and Initialize Motors
-        lfDriveMotor = hardwareMap.get(DcMotor.class, "left_front_drive");
-        rfDriveMotor = hardwareMap.get(DcMotor.class, "right_front_drive");
-        lrDriveMotor = hardwareMap.get(DcMotor.class, "left_rear_drive");
-        rrDriveMotor = hardwareMap.get(DcMotor.class, "right_rear_drive");
-        // Set motor direction
-        lfDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        rfDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        lrDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        rrDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        // Set all motors to run without encoders.
-        lfDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        rfDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        lrDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        rrDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        // Set all motors to zero power
-        lfDriveMotor.setPower(0);
-        rfDriveMotor.setPower(0);
-        lrDriveMotor.setPower(0);
-        rrDriveMotor.setPower(0);
-
-        //----------------------------------------------------------------------------------------------
-        // Servo Motors
-        //----------------------------------------------------------------------------------------------
-        // Define and initialize ALL installed servos.
-        lfDriveServo = hardwareMap.get(Servo.class, "left_front_servo");
-        rfDriveServo = hardwareMap.get(Servo.class, "right_front_servo");
-        lrDriveServo = hardwareMap.get(Servo.class, "left_rear_servo");
-        rrDriveServo = hardwareMap.get(Servo.class, "right_rear_servo");
-        // Set to initial position
-        lfDriveServo.setPosition(0.5);
-        rfDriveServo.setPosition(0.5);
-        lrDriveServo.setPosition(0.5);
-        rrDriveServo.setPosition(0.5);
-
-        //----------------------------------------------------------------------------------------------
-        // Gyro
-        //----------------------------------------------------------------------------------------------
-        // Set up the parameters with which we will use our IMU. Note that integration
-        // algorithm here just reports accelerations to the logcat log; it doesn't actually
-        // provide positional information.
-        BNO055IMU.Parameters parameters = new BNO055IMU.Parameters();
-        parameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
-        parameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
-        parameters.calibrationDataFile = "BNO055IMUCalibration.json"; // see the calibration sample opmode
-        // Retrieve and initialize the IMU. We expect the IMU to be attached to an I2C port
-        // on a Core Device Interface Module, configured to be a sensor of type "AdaFruit IMU",
-        // and named "imu".
-        imu = hardwareMap.get(BNO055IMU.class, "imu");
-        imu.initialize(parameters);
+        swerveBotHardware = new SwerveBotHardware(df);
+        swerveBotHardware.init(hardwareMap);
 
         //----------------------------------------------------------------------------------------------
         // Telemetry
@@ -163,6 +85,10 @@ public class GpatSwerveTelemetry extends LinearOpMode {
 
         // Reset to keep some timing stats for the post-'start' part of the opmode
         opmodeRunTime.reset();
+        runOpModeLoop(opmodeRunTime);
+    }
+
+    private void runOpModeLoop(ElapsedTime opmodeRunTime) {
         int loopCount = 1;
 
         //----------------------------------------------------------------------------------------------
@@ -178,27 +104,19 @@ public class GpatSwerveTelemetry extends LinearOpMode {
             // Joysticks
             //----------------------------------------------------------------------------------------------
             // Show joystick information as some other illustrative data
-            angles = imu.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.ZYX, AngleUnit.DEGREES);
             float leftStickX = gamepad1.left_stick_x;
             float leftStickY = -gamepad1.left_stick_y;
             float rightStickX = gamepad1.right_stick_x;
             float rightStickY = -gamepad1.right_stick_y;
-            float heading = angles.firstAngle;
+            double heading = swerveBotHardware.getHeading();
 
             //----------------------------------------------------------------------------------------------
             // Swerve
             //----------------------------------------------------------------------------------------------
             calculateSwerve(leftStickX, leftStickY, rightStickX, rightStickY, heading);
 
-            //----------------------------------------------------------------------------------------------
-            // Servo Motors
-            //----------------------------------------------------------------------------------------------
-            // Display the current position of all the servos
-            telemetry.addLine("Servos | ")
-                    .addData("lf", df.format(lfDriveServo.getPosition()))
-                    .addData("rf", df.format(rfDriveServo.getPosition()))
-                    .addData("lr", df.format(lrDriveServo.getPosition()))
-                    .addData("rr", df.format(rrDriveServo.getPosition()));
+
+            swerveBotHardware.addServoTelemetry(telemetry);
 
             //Transmit the telemetry to the driver station, subject to throttling.
             telemetry.update();
@@ -208,7 +126,7 @@ public class GpatSwerveTelemetry extends LinearOpMode {
         }
     }
 
-    private void calculateSwerve(double leftStickX, double leftStickY, double rightStickX, double rightStickY, double heading) {
+    private void calculateSwerve(double leftStickX, double leftStickY, double RCW, double rightStickY, double heading) {
         double BASE_LENGTH = 30;
         double BASE_WIDTH = 24;
         double baseRadius = Math.hypot(BASE_LENGTH, BASE_WIDTH);
@@ -222,7 +140,6 @@ public class GpatSwerveTelemetry extends LinearOpMode {
         // Adjust robot to field rotation to ensure movement is always from the drivers perpective
         double FWD = leftStickY * Math.cos(heading) + leftStickX * Math.sin(heading);
         double STR = -leftStickY * Math.sin(heading) + leftStickX * Math.cos(heading);
-        double RCW = rightStickX;
 
         double aCoefficient = STR - RCW * (BASE_LENGTH / baseRadius);
         double bCoefficient = STR + RCW * (BASE_LENGTH / baseRadius);
@@ -269,7 +186,7 @@ public class GpatSwerveTelemetry extends LinearOpMode {
                 .addData("x", df.format(leftStickX))
                 .addData("y", df.format(leftStickY));
         telemetry.addLine("right joystick | ")
-                .addData("x", df.format(rightStickX))
+                .addData("x", df.format(RCW))
                 .addData("y", df.format(rightStickY));
         telemetry.addLine("field | ")
                 .addData("FWD", df.format(FWD))
