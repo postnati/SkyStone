@@ -1,9 +1,11 @@
 package org.firstinspires.ftc.teamcode.bothardware;
 
 import com.qualcomm.hardware.bosch.BNO055IMU;
+import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.HardwareMap;
-import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.ServoController;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
@@ -15,6 +17,9 @@ import java.text.DecimalFormat;
 
 public class SwerveBotHardware {
     private final DecimalFormat df;
+    private final Telemetry telemetry;
+    private final HardwareMap hwMap;
+
     //----------------------------------------------------------------------------------------------
     // DC Drive Motors
     //----------------------------------------------------------------------------------------------
@@ -25,11 +30,22 @@ public class SwerveBotHardware {
     //----------------------------------------------------------------------------------------------
     // Servo Motors
     //----------------------------------------------------------------------------------------------
-    public Servo lfDriveServo = null;
-    public Servo rfDriveServo = null;
-    public Servo lrDriveServo = null;
-    public Servo rrDriveServo = null;
-    HardwareMap hwMap = null;
+    public CRServo lfDriveServo = null;
+    public CRServo rfDriveServo = null;
+    public CRServo lrDriveServo = null;
+    public CRServo rrDriveServo = null;
+    //----------------------------------------------------------------------------------------------
+    // Servo Motors
+    //----------------------------------------------------------------------------------------------
+    public AnalogInput lfEncoder = null;
+    public AnalogInput rfEncoder = null;
+    public AnalogInput lrEncoder = null;
+    public AnalogInput rrEncoder = null;
+    //----------------------------------------------------------------------------------------------
+    // Servo Controller
+    //----------------------------------------------------------------------------------------------
+    public ServoController servoController = null;
+
     //----------------------------------------------------------------------------------------------
     // Gryo
     //----------------------------------------------------------------------------------------------
@@ -37,52 +53,42 @@ public class SwerveBotHardware {
     Orientation angles; // State used for updating telemetry
 
     /* Constructor */
-    public SwerveBotHardware(DecimalFormat df) {
+    public SwerveBotHardware(DecimalFormat df, HardwareMap hardwareMap, Telemetry telemetry) {
         this.df = df;
+        this.hwMap = hardwareMap;
+        this.telemetry = telemetry;
     }
 
     /* Initialize standard Hardware interfaces */
-    public void init(HardwareMap ahwMap) {
-        // Save reference to Hardware map
-        hwMap = ahwMap;
-
+    public void init() {
         //----------------------------------------------------------------------------------------------
         // DC Drive Motors
         //----------------------------------------------------------------------------------------------
         // Define and Initialize Motors
-        lfDriveMotor = hwMap.get(DcMotor.class, "left_front_drive");
-        rfDriveMotor = hwMap.get(DcMotor.class, "right_front_drive");
-        lrDriveMotor = hwMap.get(DcMotor.class, "left_rear_drive");
-        rrDriveMotor = hwMap.get(DcMotor.class, "right_rear_drive");
-        // Set motor direction
-        lfDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        rfDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        lrDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        rrDriveMotor.setDirection(DcMotor.Direction.FORWARD); // Set to REVERSE if using AndyMark motors
-        // Set all motors to run without encoders.
-        lfDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        rfDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        lrDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        rrDriveMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        // Set all motors to zero power
-        lfDriveMotor.setPower(0);
-        rfDriveMotor.setPower(0);
-        lrDriveMotor.setPower(0);
-        rrDriveMotor.setPower(0);
+        lfDriveMotor = initMotor("left_front_drive");
+        rfDriveMotor = initMotor("right_front_drive");
+        lrDriveMotor = initMotor("left_rear_drive");
+        rrDriveMotor = initMotor("right_rear_drive");
 
         //----------------------------------------------------------------------------------------------
         // Servo Motors
         //----------------------------------------------------------------------------------------------
         // Define and initialize ALL installed servos.
-        lfDriveServo = hwMap.get(Servo.class, "left_front_servo");
-        rfDriveServo = hwMap.get(Servo.class, "right_front_servo");
-        lrDriveServo = hwMap.get(Servo.class, "left_rear_servo");
-        rrDriveServo = hwMap.get(Servo.class, "right_rear_servo");
-        // Set to initial position
-        lfDriveServo.setPosition(0.5);
-        rfDriveServo.setPosition(0.5);
-        lrDriveServo.setPosition(0.5);
-        rrDriveServo.setPosition(0.5);
+        lfDriveServo = initServo("left_front_servo");
+        rfDriveServo = initServo("right_front_servo");
+        lrDriveServo = initServo("left_rear_servo");
+        rrDriveServo = initServo("right_rear_servo");
+        // Get Servo Controller
+        servoController = lfDriveServo.getController();
+
+        //----------------------------------------------------------------------------------------------
+        // Servo Encoders
+        //----------------------------------------------------------------------------------------------
+        // Define and initialize ALL servo encoders.
+        lfEncoder = hwMap.get(AnalogInput.class, "left_front_encoder");
+        rfEncoder = hwMap.get(AnalogInput.class, "right_front_encoder");
+        lrEncoder = hwMap.get(AnalogInput.class, "left_rear_encoder");
+        rrEncoder = hwMap.get(AnalogInput.class, "right_rear_encoder");
 
         //----------------------------------------------------------------------------------------------
         // Gyro
@@ -106,16 +112,49 @@ public class SwerveBotHardware {
         return angles.firstAngle;
     }
 
-    public void addServoTelemetry(Telemetry telemetry) {
-        //----------------------------------------------------------------------------------------------
-        // Servo Motors
-        //----------------------------------------------------------------------------------------------
-        // Display the current position of all the servos
-        telemetry.addLine("Servos | ")
-                .addData("lf", df.format(lfDriveServo.getPosition()))
-                .addData("rf", df.format(rfDriveServo.getPosition()))
-                .addData("lr", df.format(lrDriveServo.getPosition()))
-                .addData("rr", df.format(rrDriveServo.getPosition()));
+    private CRServo initServo(String name) {
+        CRServo servo = hwMap.get(CRServo.class, name);
+        servo.setPower(0.0);
+        servo.setDirection(DcMotor.Direction.FORWARD);
+
+        return servo;
+    }
+
+    private DcMotor initMotor(String name) {
+        DcMotor motor = hwMap.get(DcMotor.class, name);
+        motor.setDirection(DcMotor.Direction.FORWARD);
+        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        motor.setPower(0);
+
+        return motor;
+    }
+
+    public void addAllServoTelemetry() {
+        addServoTelemetry(lfDriveServo);
+        addServoTelemetry(rfDriveServo);
+        addServoTelemetry(lrDriveServo);
+        addServoTelemetry(rrDriveServo);
+    }
+
+    private void addServoTelemetry(CRServo servo) {
+        telemetry.addLine(servo.getDeviceName() + " | ")
+                .addData("pwr", df.format(servo.getPower()))
+                .addData("dir", servo.getDirection().toString())
+                .addData("pos", df.format(servoController.getServoPosition(servo.getPortNumber())));
+
+    }
+
+    public void addAllEncoderTelemetry() {
+        addServoTelemetry(lfDriveServo);
+        addServoTelemetry(rfDriveServo);
+        addServoTelemetry(lrDriveServo);
+        addServoTelemetry(rrDriveServo);
+    }
+
+    private void addAnalogInputTelemetry(AnalogInput device) {
+        telemetry.addLine(device.getDeviceName() + " | ")
+                .addData("volt", df.format(device.getVoltage()))
+                .addData("max volt", df.format(device.getMaxVoltage()));
 
     }
 }

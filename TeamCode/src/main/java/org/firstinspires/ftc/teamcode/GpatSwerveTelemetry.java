@@ -1,36 +1,10 @@
-/* Copyright (c) 2017 FIRST. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided that
- * the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this list
- * of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice, this
- * list of conditions and the following disclaimer in the documentation and/or
- * other materials provided with the distribution.
- *
- * Neither the name of FIRST nor the names of its contributors may be used to endorse or
- * promote products derived from this software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS
- * LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.hardware.CRServo;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -40,25 +14,24 @@ import java.text.DecimalFormat;
 import java.util.Arrays;
 import java.util.Collections;
 
-/**
- * {@link GpatSwerveTelemetry} illustrates various ways in which telemetry can be
- * transmitted from the robot controller to the driver station. The sample illustrates
- * numeric and text data, formatted output, and optimized evaluation of expensive-to-acquire
- * information. The telemetry {@link Telemetry#log() log} is illustrated by scrolling a poem
- * to the driver station.
- *
- * @see Telemetry
- */
-@TeleOp(name = "Gpat Swerve Telemetry", group = "Gpat")
-//@Disabled
+@TeleOp(name = "Gpat Swerve", group = "Gpat")
 public class GpatSwerveTelemetry extends LinearOpMode {
+    public double LF_ENCODER_OFFSET = 0.238;
+    public double RF_ENCODER_OFFSET = 0.0371;
+    public double LR_ENCODER_OFFSET = 1.052;
+    public double RR_ENCODER_OFFSET = 0.241;
+    double lfEncoderOffset = LF_ENCODER_OFFSET;
+    double rfEncoderOffset = LF_ENCODER_OFFSET;
+    double lrEncoderOffset = LF_ENCODER_OFFSET;
+    double rrEncoderOffset = LF_ENCODER_OFFSET;
     private DecimalFormat df = new DecimalFormat("#.##");
     private SwerveBotHardware swerveBotHardware;
 
     @Override
     public void runOpMode() {
-        swerveBotHardware = new SwerveBotHardware(df);
-        swerveBotHardware.init(hardwareMap);
+        swerveBotHardware = new SwerveBotHardware(df, hardwareMap, telemetry);
+        swerveBotHardware.init();
+
 
         //----------------------------------------------------------------------------------------------
         // Telemetry
@@ -85,6 +58,12 @@ public class GpatSwerveTelemetry extends LinearOpMode {
 
         // Reset to keep some timing stats for the post-'start' part of the opmode
         opmodeRunTime.reset();
+
+        lfEncoderOffset = swerveBotHardware.lfEncoder.getVoltage();
+        rfEncoderOffset = swerveBotHardware.rfEncoder.getVoltage();
+        lrEncoderOffset = swerveBotHardware.lrEncoder.getVoltage();
+        rrEncoderOffset = swerveBotHardware.rrEncoder.getVoltage();
+
         runOpModeLoop(opmodeRunTime);
     }
 
@@ -115,8 +94,8 @@ public class GpatSwerveTelemetry extends LinearOpMode {
             //----------------------------------------------------------------------------------------------
             calculateSwerve(leftStickX, leftStickY, rightStickX, rightStickY, heading);
 
-
-            swerveBotHardware.addServoTelemetry(telemetry);
+            swerveBotHardware.addAllServoTelemetry();
+            swerveBotHardware.addAllEncoderTelemetry();
 
             //Transmit the telemetry to the driver station, subject to throttling.
             telemetry.update();
@@ -127,67 +106,98 @@ public class GpatSwerveTelemetry extends LinearOpMode {
     }
 
     private void calculateSwerve(double leftStickX, double leftStickY, double RCW, double rightStickY, double heading) {
-        double BASE_LENGTH = 30;
-        double BASE_WIDTH = 24;
+        double BASE_LENGTH = 15.5;
+        double BASE_WIDTH = 14.5;
         double baseRadius = Math.hypot(BASE_LENGTH, BASE_WIDTH);
 
-        // No field orientation adjustment
-        // Y  FWD
-        // X  STR
-        // X of Rotational Joystick 2 // RCW
-        // =SQRT(_L^2+_W^2)  // R
-
+        heading = 360 - ((heading + 360) % 360);
+        double headingRadians = Math.toRadians(heading);
         // Adjust robot to field rotation to ensure movement is always from the drivers perpective
-        double FWD = leftStickY * Math.cos(heading) + leftStickX * Math.sin(heading);
-        double STR = -leftStickY * Math.sin(heading) + leftStickX * Math.cos(heading);
+        double FWD = (leftStickY * Math.cos(headingRadians)) + (leftStickX * Math.sin(headingRadians));
+        double STR = (-leftStickY * Math.sin(headingRadians)) + (leftStickX * Math.cos(headingRadians));
 
-        double aCoefficient = STR - RCW * (BASE_LENGTH / baseRadius);
-        double bCoefficient = STR + RCW * (BASE_LENGTH / baseRadius);
-        double cCoefficient = FWD - RCW * (BASE_WIDTH / baseRadius);
-        double dCoefficient = FWD + RCW * (BASE_WIDTH / baseRadius);
+        double aCoefficient = STR - (RCW * (BASE_LENGTH / baseRadius));
+        double bCoefficient = STR + (RCW * (BASE_LENGTH / baseRadius));
+        double cCoefficient = FWD - (RCW * (BASE_WIDTH / baseRadius));
+        double dCoefficient = FWD + (RCW * (BASE_WIDTH / baseRadius));
 
-        double rfWheelSpeed = Math.hypot(bCoefficient, cCoefficient);
         double lfWheelSpeed = Math.hypot(bCoefficient, dCoefficient);
-        double rrWheelSpeed = Math.hypot(aCoefficient, dCoefficient);
-        double lrWheelSpeed = Math.hypot(aCoefficient, cCoefficient);
+        double rfWheelSpeed = Math.hypot(bCoefficient, cCoefficient);
+        double lrWheelSpeed = Math.hypot(aCoefficient, dCoefficient);
+        double rrWheelSpeed = Math.hypot(aCoefficient, cCoefficient);
 
-        double maxWheelSpeed = Collections.max(Arrays.asList(rfWheelSpeed, lfWheelSpeed, rrWheelSpeed, lrWheelSpeed));
+        double maxWheelSpeed = Collections.max(Arrays.asList(lfWheelSpeed, rfWheelSpeed, lrWheelSpeed, rrWheelSpeed));
 
-        if (maxWheelSpeed > 0) {
-            rfWheelSpeed = rfWheelSpeed / maxWheelSpeed;
+        if (maxWheelSpeed > 1) {
             lfWheelSpeed = lfWheelSpeed / maxWheelSpeed;
-            rrWheelSpeed = rrWheelSpeed / maxWheelSpeed;
+            rfWheelSpeed = rfWheelSpeed / maxWheelSpeed;
             lrWheelSpeed = lrWheelSpeed / maxWheelSpeed;
+            rrWheelSpeed = rrWheelSpeed / maxWheelSpeed;
         }
 
-        double rfWheelAngle = 0;
-        double lfWheelAngle = 0;
-        double rrWheelAngle = 0;
-        double lrWheelAngle = 0;
+        double rfWheelAngle = -1;
+        double lfWheelAngle = -1;
+        double rrWheelAngle = -1;
+        double lrWheelAngle = -1;
 
         if (bCoefficient != 0 || cCoefficient != 0) {
-            rfWheelAngle = Math.atan2(bCoefficient, cCoefficient) * 180 / Math.PI;
+            double rfRad = Math.atan2(bCoefficient, cCoefficient);
+            double rfDeg = rfRad * 180 / Math.PI;
+            double rawAbs = (rfDeg + 360) % 360;
+            rfWheelAngle = rawAbs;
         }
 
         if (bCoefficient != 0 || dCoefficient != 0) {
-            lfWheelAngle = Math.atan2(bCoefficient, dCoefficient) * 180 / Math.PI;
+            lfWheelAngle = ((Math.atan2(bCoefficient, dCoefficient) * 180 / Math.PI) + 360) % 360;
         }
 
+
         if (aCoefficient != 0 || dCoefficient != 0) {
-            rrWheelAngle = Math.atan2(aCoefficient, dCoefficient) * 180 / Math.PI;
+            lrWheelAngle = ((Math.atan2(aCoefficient, dCoefficient) * 180 / Math.PI) + 360) % 360;
         }
 
         if (aCoefficient != 0 || cCoefficient != 0) {
-            lrWheelAngle = Math.atan2(aCoefficient, cCoefficient) * 180 / Math.PI;
+            rrWheelAngle = ((Math.atan2(aCoefficient, cCoefficient) * 180 / Math.PI) + 360) % 360;
         }
 
+        boolean lfWheelInPosition = updateServo(swerveBotHardware.lfDriveMotor, swerveBotHardware.lfDriveServo, swerveBotHardware.lfEncoder, lfWheelAngle, lfEncoderOffset);
+        boolean rfWheelInPosition = updateServo(swerveBotHardware.rfDriveMotor, swerveBotHardware.rfDriveServo, swerveBotHardware.rfEncoder, rfWheelAngle, rfEncoderOffset);
+        boolean lrWheelInPosition = updateServo(swerveBotHardware.lrDriveMotor, swerveBotHardware.lrDriveServo, swerveBotHardware.lrEncoder, lrWheelAngle, lrEncoderOffset);
+        boolean rrWheelInPosition = updateServo(swerveBotHardware.rrDriveMotor, swerveBotHardware.rrDriveServo, swerveBotHardware.rrEncoder, rrWheelAngle, rrEncoderOffset);
+
+        if (gamepad1.right_trigger > 0.2) {
+            swerveBotHardware.lfDriveMotor.setPower(lfWheelSpeed);
+            swerveBotHardware.rfDriveMotor.setPower(rfWheelSpeed);
+            swerveBotHardware.lrDriveMotor.setPower(lrWheelSpeed);
+            swerveBotHardware.rrDriveMotor.setPower(rrWheelSpeed);
+        } else {
+            swerveBotHardware.lfDriveMotor.setPower(lfWheelSpeed / 3);
+            swerveBotHardware.rfDriveMotor.setPower(rfWheelSpeed / 3);
+            swerveBotHardware.lrDriveMotor.setPower(lrWheelSpeed / 3);
+            swerveBotHardware.rrDriveMotor.setPower(rrWheelSpeed / 3);
+        }
+
+//        if(lfWheelInPosition && rfWheelInPosition && lrWheelInPosition && rrWheelInPosition) {
+//        }
+
         telemetry.addLine("heading | ").addData("d", df.format(heading));
+        telemetry.addLine("Trig | ")
+                .addData("rad", df.format(headingRadians))
+                .addData("cos", df.format(Math.cos(headingRadians)))
+                .addData("sin", df.format(Math.sin(headingRadians)));
         telemetry.addLine("left joystick | ")
                 .addData("x", df.format(leftStickX))
                 .addData("y", df.format(leftStickY));
         telemetry.addLine("right joystick | ")
                 .addData("x", df.format(RCW))
                 .addData("y", df.format(rightStickY));
+        telemetry.addLine("gc | ")
+                .addData("rt", df.format(gamepad1.right_trigger))
+                .addData("rb", gamepad1.right_bumper)
+                .addData("x", gamepad1.x)
+                .addData("y", gamepad1.y)
+                .addData("a", gamepad1.a)
+                .addData("b", gamepad1.b);
         telemetry.addLine("field | ")
                 .addData("FWD", df.format(FWD))
                 .addData("STR", df.format(STR))
@@ -198,60 +208,94 @@ public class GpatSwerveTelemetry extends LinearOpMode {
                 .addData("b", df.format(bCoefficient))
                 .addData("c", df.format(cCoefficient))
                 .addData("d", df.format(dCoefficient));
-        telemetry.addLine("RF | ").addData("ws", df.format(rfWheelSpeed)).addData("wa", df.format(rfWheelAngle));
-        telemetry.addLine("LF | ").addData("ws", df.format(lfWheelSpeed)).addData("wa", df.format(lfWheelAngle));
-        telemetry.addLine("RR | ").addData("ws", df.format(rrWheelSpeed)).addData("wa", df.format(rrWheelAngle));
-        telemetry.addLine("LR | ").addData("ws", df.format(lrWheelSpeed)).addData("wa", df.format(lrWheelAngle));
+        telemetry.addLine("LF | ")
+                .addData("ws", df.format(lfWheelSpeed))
+                .addData("wa", df.format(lfWheelAngle));
+        telemetry.addLine("RF | ")
+                .addData("ws", df.format(rfWheelSpeed))
+                .addData("wa", df.format(rfWheelAngle));
+        telemetry.addLine("LR | ")
+                .addData("ws", df.format(lrWheelSpeed))
+                .addData("wa", df.format(lrWheelAngle));
+        telemetry.addLine("RR | ")
+                .addData("ws", df.format(rrWheelSpeed))
+                .addData("wa", df.format(rrWheelAngle));
+        telemetry.addLine("LfEn | ")
+                .addData("off", df.format(lfEncoderOffset))
+                .addData("ep", df.format(getAngleFromEncoder(swerveBotHardware.lfEncoder, lfEncoderOffset)))
+                .addData("ev", df.format(swerveBotHardware.lfEncoder.getVoltage()))
+                .addData("mev", df.format(swerveBotHardware.lfEncoder.getMaxVoltage()))
+                .addData("inP", lfWheelInPosition);
+        telemetry.addLine("RfEn | ")
+                .addData("off", df.format(rfEncoderOffset))
+                .addData("ep", df.format(getAngleFromEncoder(swerveBotHardware.rfEncoder, rfEncoderOffset)))
+                .addData("ev", df.format(swerveBotHardware.rfEncoder.getVoltage()))
+                .addData("mev", df.format(swerveBotHardware.rfEncoder.getMaxVoltage()))
+                .addData("inP", rfWheelInPosition);
+        telemetry.addLine("LrEn | ")
+                .addData("off", df.format(lrEncoderOffset))
+                .addData("ep", df.format(getAngleFromEncoder(swerveBotHardware.lrEncoder, lrEncoderOffset)))
+                .addData("ev", df.format(swerveBotHardware.lrEncoder.getVoltage()))
+                .addData("mev", df.format(swerveBotHardware.lrEncoder.getMaxVoltage()))
+                .addData("inP", lrWheelInPosition);
+        telemetry.addLine("RrEn | ")
+                .addData("off", df.format(rrEncoderOffset))
+                .addData("ep", df.format(getAngleFromEncoder(swerveBotHardware.rrEncoder, rrEncoderOffset)))
+                .addData("ev", df.format(swerveBotHardware.rrEncoder.getVoltage()))
+                .addData("mev", df.format(swerveBotHardware.rrEncoder.getMaxVoltage()))
+                .addData("inP", rrWheelInPosition);
+    }
 
+    private boolean updateServo(DcMotor motor, CRServo servo, AnalogInput encoder, double wheelAngle, double encoderOffset) {
+        double encoderAngle = getAngleFromEncoder(encoder, encoderOffset);
+        boolean wheelInPosition = false;
 
-        /*
-        30  // L
-        24  // W
+        if (wheelAngle < 0) {
+            wheelAngle = encoderAngle;
+        }
 
-        Y  FWD
-        X  STR
-        X of Rotational Joystick 2 // RCW
+        double rawAngularTravel = wheelAngle - encoderAngle;
+        double angularTravel = (rawAngularTravel + 360) % 360;
 
-        =SQRT(_L^2+_W^2)  // R
+        if (angularTravel <= 90) {
+            // Clockwise to target
+            servo.setDirection(DcMotor.Direction.FORWARD);
+            motor.setDirection(DcMotor.Direction.FORWARD);
+        } else if (angularTravel <= 180) {
+            angularTravel = 180 - angularTravel;
+            servo.setDirection(DcMotor.Direction.REVERSE);
+            motor.setDirection(DcMotor.Direction.REVERSE);
+        } else if (angularTravel <= 270) {
+            angularTravel = angularTravel - 180;
+            servo.setDirection(DcMotor.Direction.FORWARD);
+            motor.setDirection(DcMotor.Direction.REVERSE);
+        } else {
+            angularTravel = 360 - angularTravel;
+            servo.setDirection(DcMotor.Direction.REVERSE);
+            motor.setDirection(DcMotor.Direction.FORWARD);
+        }
 
-        9  =STR-RCW*(_L/_R) // A
-        10 =STR+RCW*(_L/_R) // B
-        11  =FWD-RCW*(_W/_R) // C
-        12  =FWD+RCW*(_W/_R)  // D
+        if (angularTravel > 10) {
+            if (angularTravel <= 20) {
+                servo.setPower(angularTravel / 40);
+            } else {
+                servo.setPower(1);
+            }
+        } else {
+            servo.setPower(0);
+            wheelInPosition = true;
+        }
 
-        13  =SQRT(_B^2+_C^2)  // WS1
-        14  =SQRT(_B^2+_D^2)  // WS2
-        15  =SQRT(_A^2+_D^2)  // WS3
-        16  =SQRT(_A^2+_C^2)  // WS4
-        17  =MAX(A13:A16)
+        return wheelInPosition;
+    }
 
+    private double getAngleFromEncoder(AnalogInput encoder, double voltageOffset) {
+        double rawVoltage = encoder.getVoltage();
+        double maxVoltage = encoder.getMaxVoltage();
+        double voltage = ((rawVoltage - voltageOffset) + maxVoltage) % maxVoltage;
 
-        =IF(_max>1,A13/_max,A13)
-        =IF(_max>1,A14/_max,A14)
-        =IF(_max>1,A15/_max,A15)
-        =IF(_max>1,A16/_max,A16)
-
-        =IF(AND(_C=0,_B=0),0,ATAN2(_C,_B)*180/PI())
-        =IF(AND(_D=0,_B=0),0,ATAN2(_D,_B)*180/PI())
-        =IF(AND(_D=0,_A=0),0,ATAN2(_D,_A)*180/PI())
-        =IF(AND(_C=0,_A=0),0,ATAN2(_C,_A)*180/PI())
-
-
-        V1x = Vx + (ωr)x = Vx + ωL/2
-        V1y = Vy + (ωr)y = Vy – ωW/2
-        V2x = Vx + (ωr)x = Vx + ωL/2
-        V2y = Vy + (ωr)y = Vy + ωW/2
-
-        V3x = Vx + (ωr)x = Vx – ωL/2
-        V3y = Vy + (ωr)y = Vy + ωW/2
-        V4x = Vx + (ωr)x = Vx – ωL/2
-        V4y = Vy + (ωr)y = Vy – ωW/2
-
-
-        Convert the joystick cartesian coordinates (x,y) into polar coordinates (r,θ)
-        Subtract the gyro angle from the joystick angle
-        Convert back to cartesian coordinates
-
-        */
+        double initEncoderAngle = ((voltage * 360) / maxVoltage);
+        double encoderAngle = 360 - initEncoderAngle;
+        return encoderAngle;
     }
 }
